@@ -8,3 +8,5 @@ uint8[] mask
 uint16 mask_height
 uint16 mask_width
 uint16 mask_channels
+
+nav_msgs/Odometry pose

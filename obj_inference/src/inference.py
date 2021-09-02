@@ -1,7 +1,9 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 from typing import Tuple, Union
 
 import numpy as np
+from numpy import median
+
 import rospy
 import torch
 from cv_bridge import CvBridge
@@ -15,7 +17,10 @@ REALSENSE_SENSOR_HEIGHT_MM = 2.454  # millimeters
 REALSENSE_SENSOR_WIDTH_MM = 3.896  # millimeters
 REALSENSE_REZ_HEIGHT = 800  # pixels
 REALSENSE_REZ_WIDTH = 1280  # pixels
-
+REALSENSE_FX = 628.071 # D455
+REALSENSE_PPX = 637.01 # D455
+REALSENSE_FX = 616.6 # D435
+REALSENSE_PPX = 318.5 # D435
 
 class Distance_Inference:
     def __init__(self):
@@ -68,28 +73,31 @@ class Distance_Inference:
         for i, obj_mask in enumerate(mask):
             # Trimmed mean for distance to reject outliers
             obj = obj_mask * depth_map
-            rel_positions[i][1] = stats.trim_mean(
-                obj[obj > 0], proportiontocut=0.2, axis=None
-            )
+            # rel_positions[i][1] = stats.trim_mean(
+            #     obj[obj > 0], proportiontocut=0.3, axis=None
+            # )
+            rel_positions[i][1] = min(stats.trimboth(
+                obj[obj > 0], proportiontocut=0.1, axis=None
+            ))
 
             # Sum only width
             object_px_size = np.max(obj_mask.sum(1))
-            obj_width_sensor = (REALSENSE_SENSOR_WIDTH_MM * object_px_size) / (
-                REALSENSE_REZ_WIDTH
-            )
+            # obj_width_sensor = (REALSENSE_SENSOR_WIDTH_MM * object_px_size) / (
+            #     REALSENSE_REZ_WIDTH
+            # )
             object_sizes[i] = (
-                rel_positions[i][1] * obj_width_sensor
-            ) / REALSENSE_FOCAL_LENGTH
+                rel_positions[i][1] * object_px_size
+            ) / REALSENSE_FX
 
             # Calc width of FOV at known distance
-            field_width = (
-                REALSENSE_SENSOR_WIDTH_MM * rel_positions[i][1]
-            ) / REALSENSE_FOCAL_LENGTH
+            # field_width = (
+            #     REALSENSE_SENSOR_WIDTH_MM * rel_positions[i][1]
+            # ) / REALSENSE_FOCAL_LENGTH
 
             if fill_center:
                 centers[i] = ndimage.measurements.center_of_mass(obj_mask)
 
-            rel_positions[i][0] = (centers[i][0] / REALSENSE_REZ_WIDTH) * field_width
+            rel_positions[i][0] = ((centers[i][0] - (REALSENSE_PPX)) / REALSENSE_FX) * rel_positions[i][1]
             #  rel_positions[i][2] = (centers[i][1] / REALSENSE_REZ_HEIGHT) * field_width
 
         return (object_sizes, rel_positions)
@@ -121,6 +129,7 @@ class Distance_Inference:
         obj.header = pred.header
         obj.labels = pred.labels
         obj.scores = pred.scores
+        obj.pose = pred.pose
         self.inference_pub.publish(obj)
 
 

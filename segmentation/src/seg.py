@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import time
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
@@ -14,6 +14,7 @@ from detectron2.config import get_cfg
 from detectron2.engine import DefaultPredictor
 from segmentation.msg import Prediction
 from sensor_msgs.msg import Image
+from nav_msgs.msg import OccupancyGrid, Odometry
 from torch import Tensor
 
 if TYPE_CHECKING:
@@ -67,6 +68,9 @@ class DetectronModel(DefaultPredictor, AbstractModel):
         super().__init__(self.config)
 
         self.class_names = self.metadata.class_names
+        # self.class_names = ['person',  'bench',  'backpack', 'handbag',  'suitcase',  'sports ball',
+        #                     'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop',
+        #                     'cell phone', 'microwave', 'sink', 'refrigerator', 'book', 'vase']
         self.num_classes = len(self.class_names)
 
     def setup_predictor_config(
@@ -168,7 +172,8 @@ class SegmentationModel(nn.Module):
         self.pred_pub = rospy.Publisher("/seg/prediction", Prediction, queue_size=3)
         rgb_sub = message_filters.Subscriber(rgb_topic, Image)
         dep_sub = message_filters.Subscriber(depth_topic, Image)
-        synch = message_filters.ApproximateTimeSynchronizer([rgb_sub, dep_sub], 3, 0.1)
+        odometer_sub = message_filters.Subscriber('/t265/odom/sample', Odometry)
+        synch = message_filters.ApproximateTimeSynchronizer([rgb_sub, dep_sub, odometer_sub], 10, 0.1)
         synch.registerCallback(self.callback)
         self.cv_bridge = CvBridge()
 
@@ -176,12 +181,14 @@ class SegmentationModel(nn.Module):
         self,
         rgb: Image,
         depth_map: Image,
+        pose: Odometry,
     ) -> None:
         r"""ROS Subscriber to input RGB image + depth maps"""
         print(
             "SegmentationModel recieved message",
             rgb.header.stamp,
             depth_map.header.stamp,
+            pose.header.stamp,
         )
         rgb_img = self.cv_bridge.imgmsg_to_cv2(
             rgb,
@@ -200,6 +207,7 @@ class SegmentationModel(nn.Module):
         pub_img.scores = scores
         pub_img.centers = centers.ravel()
         pub_img.labels = labels
+        pub_img.pose = pose
 
         #  end_t = time.perf_counter()
         #  print("TIME TAKEN SEG NODE: ", end_t - start_t)

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import cv2
 import message_filters
 import numpy as np
@@ -7,7 +7,8 @@ from cv_bridge import CvBridge
 from obj_inference.msg import Objects
 from segmentation.msg import Prediction
 from sensor_msgs.msg import Image
-
+import matplotlib.pyplot as plt
+plt.rcParams["figure.figsize"] = (30,15)
 bridge = CvBridge()
 
 
@@ -25,7 +26,7 @@ def annotate_image(rgb, centers, labels, scores, dists):
         )
         rgb = cv2.putText(
             rgb,
-            "{:.2f}".format(dists[i]),
+            "{:.2f}, {:.2f}".format(dists[i][0], dists[i][1]),
             fontScale=0.65,
             org=(int(center[0]), int(center[1] + 20)),
             thickness=1,
@@ -36,6 +37,7 @@ def annotate_image(rgb, centers, labels, scores, dists):
 
 
 def callback(pred, inf, rgb, dep):
+    global plot_flag, img
     print("Visualize recieved messages")
     sizes = np.array(inf.sizes)
     scores = np.array(inf.scores)
@@ -50,7 +52,7 @@ def callback(pred, inf, rgb, dep):
     chan = pred.mask_channels
     centers = np.array(pred.centers).reshape(chan, 2)
     mask = np.frombuffer(pred.mask, dtype=np.uint8).reshape(chan, width, height).sum(0)
-    rgb = annotate_image(rgb_img, centers, labels, scores, positions[:, 1])
+    rgb = annotate_image(rgb_img, centers, labels, scores, positions)
     masskk = cv2.applyColorMap(
         cv2.normalize(
             mask[:, :, np.newaxis], None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
@@ -63,6 +65,7 @@ def callback(pred, inf, rgb, dep):
     )
     divider = np.zeros((480, 10, 3), dtype=np.uint8)
     concatenn = np.concatenate((masskk, divider, depppthh, divider, rgb), 1)
+
     cv2.imshow("input", concatenn)
     key = cv2.waitKey(20)
     if key == 27:
@@ -75,22 +78,21 @@ class Visualizer:
     def __init__(self):
         pred_sub = message_filters.Subscriber("/seg/prediction", Prediction)
         inf_sub = message_filters.Subscriber("/inference/obj_inference", Objects)
-        rgb_sub = message_filters.Subscriber("/camera/color/image_raw", Image)
-        dep_sub = message_filters.Subscriber("/camera/depth/image_rect_raw", Image)
+        rgb_sub = message_filters.Subscriber("/d400/color/image_raw", Image)
+        dep_sub = message_filters.Subscriber("/d400/depth/image_rect_raw", Image)
 
         ts = message_filters.ApproximateTimeSynchronizer(
             [pred_sub, inf_sub, rgb_sub, dep_sub],
-            10,
-            0.1,
+            10000,
+            0.3,
         )
         ts.registerCallback(callback)
 
 
 if __name__ == "__main__":
     viz = rospy.get_param("visualize")
-
     if viz:
         rospy.init_node("visualize")
-        cv2.namedWindow("input")
+        # cv2.namedWindow("input")
         viz = Visualizer()
         rospy.spin()

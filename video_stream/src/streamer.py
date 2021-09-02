@@ -1,4 +1,4 @@
-#!/usr/bin/env  python
+#!/usr/bin/env  python3
 import glob
 import itertools
 import os
@@ -312,7 +312,9 @@ class ROSBagSP(VideoStream):
 def main():
     rospy.init_node("video_stream")
     stream_type = rospy.get_param("video_stream")
+    publish_rate = rospy.get_param("publish_rate")
     video_stream = None
+    rospy.spin()
 
     if stream_type.lower() == "rosbag":
         bag_file = rospy.get_param("bag_file")
@@ -333,7 +335,8 @@ def main():
         video_stream = RawImages(rgb_dir=rgb_dir, depth_dir=depth_dir)
 
     # Loop, publishing images
-    video_stream.loop()
+    if video_stream:
+        video_stream.loop()
 
 
 if __name__ == "__main__":
